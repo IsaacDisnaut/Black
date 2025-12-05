@@ -1,72 +1,361 @@
+
+
 <!doctype html>
-<html lang="en">
-
+<html lang="th">
 <head>
-    <!-- Required meta tags -->
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Avatar Robot Console</title>
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
-        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-       <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <!--<script src="script2.js"></script>-->
-         
-    <title></title>
-     <style>
- body {
-      margin: 0;
-      height: 100vh;
-      background-color: black;
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
 
-      display: flex;
-      justify-content: center; /* จัดตรงกลางแนวนอน */
-      align-items: center;     /* จัดตรงกลางแนวตั้ง */
+  <!-- MQTT (browser) + PeerJS -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+
+  <style>
+    body { background: #111; color: #eaeaea; }
+    .page { display: grid; grid-template-columns: 1fr 360px; gap: 16px; padding: 16px; }
+    .video-wrap { background:#1b1b1b; border-radius:12px; padding:16px; box-shadow:0 4px 12px rgba(0,0,0,.35);}
+    video { width:50%; height:auto; border-radius:8px; background:#000; }
+    .sidebar { display:flex; flex-direction:column; gap:16px; }
+    .cardish { background:#1b1b1b; border-radius:12px; padding:12px; box-shadow:0 4px 16px rgba(0,0,0,.35);}
+    .direction-pad { display:grid; grid-template-columns: 80px 80px 80px; grid-template-rows: 80px 80px 80px; gap:10px; justify-content:center; }
+    .direction-pad button { border:none; border-radius:12px; font-weight:600; }
+    .btn-ctl { background:#2f6fed; color:white; }
+    .btn-ctl:hover { filter:brightness(1.1); }
+    .up{ grid-column:2; grid-row:1 } .left{ grid-column:1; grid-row:2 } .mid{ grid-column:2; grid-row:2 }
+    .right{ grid-column:3; grid-row:2 } .down{ grid-column:2; grid-row:3 } .close{grid-column:1; grid-row:1} .center{grid-column:3; grid-row:3}
+    .note { font-size:.9rem; color:#bbb; }
+    .toolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+     #toggleBtn {
+      padding: 12px 24px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background-color: gray;
+      color: white;
     }
-
-    .container {
-      display: flex;
-      gap: 100px; 
+    #toggleBtn.on {
+      background-color: green;
     }
-
-    .outer-circle {
-      width: 260px;
-      height: 260px;
-      background-color: white;
-      border-radius: 50%;
-
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative; 
-      overflow: hidden; 
-        transform: translate(70%, -30%);
-    }
-
-      .inner-circle {
-      width: 110px;
-      height: 110px;
-      background-color: black;
-      border-radius: 50%;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      transition: top 0.2s, left 0.2s; 
-    }
-     .closed {
-      background-color: black !important; /* เปลี่ยนเป็นดำ */
-    }
-
-    .closed .inner-circle {
-      display: none; /* ซ่อนตาดำ */
-    }
+    #toggleBtn.off {
+      background-color: red;
+      }
   </style>
 </head>
-
 <body>
 
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">Avatar Robot Console</span>
+      <div class="d-flex gap-2">
+        <input id="room-input" class="form-control form-control-sm" style="width:120px" placeholder="Room (เช่น 2)" />
+        <button class="btn btn-sm btn-secondary" onclick="createRoom()">Create</button>
+        <button class="btn btn-sm btn-primary" onclick="joinRoom()">Join</button>
+        <button id="btn-hangup" class="btn btn-sm btn-danger">วางสาย</button>
+      </div>
+    </div>
+  </nav>
+
+<div class="page">
+    <!-- LEFT: Remote video (ใหญ่) -->
+    <section class="video-wrap">
+      <div class="toolbar">
+        <h5 class="mb-0">วิดีโอหุ่นยนต์ (Remote)</h5>
+        <div id="notification" class="text-info"></div>
+      </div>
+            <div class="col ps-5 pt-5" id="local-vid-container" hidden>              
+                <div class="row p-3">
+                    <video height="200" id="local-video" controls class="local-video" hidden></video>
+                </div>
+                <div class="row">
+                    <!--<div class="col-3 col-sm-12"><button type="submit" class="btn btn-success mb-3"
+                            onclick="startScreenShare()">Share Screen</button>
+                    </div>-->
+                </div>
+            </div>
+            <div class="col ps-5 pt-5" id="screenshare-container" hidden>
+                <div class="row">
+                    <div class="col">
+                        <h2>Screen Shared Stream</h2>
+                    </div>
+
+                </div>
+                <div class="row p-3">
+                    <video height="300" id="screenshared-video" controls class="local-video"></video>
+                </div>
+                <!-- <div class="row">
+                    <div class="col-3 col-sm-12"><button type="submit" class="btn btn-success mb-3"
+                            onclick="startScreenShare()">Share Screen</button>
+                    </div>
+                </div> -->
+            </div>
+            <div class="col ps-5 pt-5" id="remote-vid-container" >
+                    <video height="300" id="remote-video" controls class="remote-video" ></video>
+            </div>
+            <br>
+            <h6>เปิดกล้อง</h6>
+            <br>
+            <div class="direction-pad">
+              <button id="toggleBtn" class="off">OFF</button>
+            
+ <button class="btn-ctl up" id="eyeup" onclick="publishMessage('eyeup')">↑</button>
+    <button class="btn-ctl left" id="eyeleft" onclick="publishMessage('eyeleft')">←</button>
+    <button class="btn-ctl mid" id="eyemid" onclick="publishMessage('eyecenter')">●</button>
+    <button class= "btn-ctl right" id="eyeright" onclick="publishMessage('eyeright')">→</button>
+    <button class="btn-ctl down" id="eyedown" onclick="publishMessage('eyedown')">↓</button>
+    <button class="btn-ctl center" id="eyeclose" onclick="publishMessage('eyeclose')">c</button>
+  <script>
+    const toggleBtn = document.getElementById("toggleBtn");
+    let state = false; // false = OFF, true = ON
+     const remoteVideo = document.getElementById("remote-video");
+
+    toggleBtn.addEventListener("click", () => {
+      state = !state; // สลับสถานะ
+      if (state) {
+        remoteVideo.hidden = false;
+        toggleBtn.textContent = "ON";
+        toggleBtn.classList.remove("off");
+        toggleBtn.classList.add("on");
+        publishMessage("ON");
+        remoteVideo.srcObject = stream;
+        remoteVideo.play();
+        
+      } else {
+        toggleBtn.textContent = "OFF";
+        toggleBtn.classList.remove("on");
+        toggleBtn.classList.add("off");
+        publishMessage("OFF");
+        remoteVideo.hidden = true;
+      }
+    });
+
+  </script>
+          
+        </div>
+    </section>
+    
+    <!-- RIGHT: Sidebar (จอเล็ก + control) -->
+    <aside class="sidebar">
+      <!-- Incoming Call box -->
+      <div class="cardish">
+        <h6 class="mb-2">สถานะสาย</h6>
+        <div class="note">หุ่นกดปุ่มจริง → เว็บจะเด้ง “สายเข้า” อัตโนมัติ</div>
+        <button id="btn-manual-ring" class="btn btn-sm btn-outline-light">ทดสอบเด้งสายเข้า (จำลอง)</button>
+      </div>
+
+      <!-- Eye monitor (iframe) -->
+      <div class="cardish">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0">มอนิเตอร์ตาหุ่น (จอเล็ก)</h6>
+          <button class="btn btn-sm btn-outline-secondary" onclick="reloadEye()">รีเฟรช</button>
+        </div>
+        <iframe id="eye-monitor" src="" style="width:100%; height:200px; border:0; border-radius:8px; background:#000;"></iframe>
+        <div class="note mt-2">ตั้งค่า <code>PI_EYE_URL</code> ให้ชี้ไปยัง Pi ที่รัน eye.html</div>
+      </div>
+
+      <!-- Servo control -->
+      <div class="cardish">
+        <h6 class="mb-2">ควบคุมเซอร์โว (PAN / TILT)</h6>
+       <div class="direction-pad">
+    <button class="btn-ctl up" id="up">↑</button>
+    <button class="btn-ctl left" id="left">←</button>
+    <button class="btn-ctl mid" id="mid" >●</button>
+    <button class= "btn-ctl right" id="right">→</button>
+    <button class="btn-ctl down" id="down">↓</button>
+  </div>
+
+                  <p>Up: <span id="countUp">0</span></p>
+                  <p>Left: <span id="countLeft">0</span></p>
+                  <p>Right: <span id="countRight">0</span></p>
+                  <p>Down: <span id="countDown">0</span></p>
+  <script>
+    // ฟังก์ชันสำหรับส่งข้อมูล
+    function publishMessage(button) {
+      console.log("ส่งข้อมูล:", button);
+      // ที่นี่คุณจะต่อ MQTT หรือ WebSocket ได้ เช่น
+      // mqttClient.publish("dpad/" + button, count.toString());
+    }
+
+    const buttons = {
+      up:    { el: document.getElementById('up'),    countEl: document.getElementById('countUp'),    count: 0, interval: null },
+      mid:    { el: document.getElementById('mid'),  countEl: document.getElementById('countMid'),  count: 0, interval: null },
+      left:  { el: document.getElementById('left'),  countEl: document.getElementById('countLeft'),  count: 0, interval: null },
+      right: { el: document.getElementById('right'), countEl: document.getElementById('countRight'), count: 0, interval: null },
+      down:  { el: document.getElementById('down'),  countEl: document.getElementById('countDown'),  count: 0, interval: null },
+    };
+
+    function setupButton(name, button) {
+      button.el.addEventListener('mousedown', () => {
+        button.interval = setInterval(() => {
+          button.count++;
+          button.countEl.textContent = button.count;
+          publishMessage(name, button.count); // ส่งข้อมูลออกทุกครั้งที่นับ
+        }, 100);
+      });
+
+      function stopAndReset() {
+        clearInterval(button.interval);
+        publishMessage(name, 0); // ส่งค่า 0 ตอนปล่อยปุ่ม
+        button.count = 0;
+        button.countEl.textContent = button.count;
+      }
+
+      button.el.addEventListener('mouseup', stopAndReset);
+     
+    }
+    
+    for (const key in buttons) {
+      setupButton(key, buttons[key]);
+    }
+  </script>
+  <!--Subarea-->
+        <iframe src="mqtt\sub.html" width="600" height="400"></iframe>
+    </aside>
+  </div>
+
+  <!-- Incoming Call Modal -->
+  <div class="modal fade" id="incomingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <div class="modal-header bg-primary">
+        <h6 class="modal-title text-white">มีสายเข้าจากหุ่นยนต์</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="ปิด"></button>
+      </div>
+      <div class="modal-body text-black">ต้องการรับสายตอนนี้ไหม?</div>
+      <div class="modal-footer">
+        <button id="btn-decline" class="btn btn btn-danger" data-bs-dismiss="modal">ปฏิเสธ</button>
+        <button id="btn-accept"  class="btn btn btn-success" onclick="publishMessage('ON')">รับสาย</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Bootstrap bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- โค้ด WebRTC หลัก (อิงจากไฟล์ script.js ของคุณ) -->
+  <script src="script.js"></script>
+  
+  <script>
+    // ---------- วางสาย ----------
+    function endCall() {
+      try {
+        if (window.currentPeer && window.currentPeer.close) {
+          window.currentPeer.close();
+        }
+        if (window.local_stream) {
+          window.local_stream.getTracks().forEach(t => t.stop());
+        }
+        const rv = document.getElementById("remote-video");
+        if (rv) rv.srcObject = null;
+        document.getElementById("notification").textContent = "สายถูกตัดแล้ว";
+      } catch(e) {
+        console.warn("endCall error:", e);
+      }
+    }
+  </script>
+
+<script>
+    // ==== Ringtone (เสียงเงียบเอง แต่ "ไม่ปิด" โมดัล) ====
+    let audioCtx, ringInterval, ringTimeout;
+    function playBeepOnce() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.value = 0.2;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+    }
+    function startRingTone(periodMs = 1200, autoSilenceMs = 15000) {
+      stopRingTone();
+      playBeepOnce();
+      ringInterval = setInterval(playBeepOnce, periodMs);
+      ringTimeout  = setTimeout(stopRingTone,  autoSilenceMs);
+    }
+    function stopRingTone() {
+      if (ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+      if (ringTimeout)  { clearTimeout(ringTimeout);   ringTimeout  = null; }
+    }
+
+    // ==== แสดงโมดัลสายเข้า (ค้างไว้) ====
+    function showIncomingModal() {
+      const el = document.getElementById("incomingModal");
+      const modal = bootstrap.Modal.getOrCreateInstance(el, { backdrop: 'static', keyboard: true });
+      modal.show();
+      startRingTone(1200, 15000);
+      el.addEventListener("hidden.bs.modal", () => {
+        // เก็บกวาด overlay ทุกครั้ง
+        document.querySelectorAll(".modal-backdrop").forEach(n => n.remove());
+        document.body.classList.remove("modal-open");
+        document.body.style.removeProperty("padding-right");
+        stopRingTone();
+      }, { once: true });
+    }
+
+    // ให้ไฟล์อื่น (เช่น sub.js) เรียกได้
+    window.showIncomingModal = showIncomingModal;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // ปุ่มทดสอบเด้งสายเข้า -> ใช้ instance เดียวกัน
+      const testBtn = document.getElementById("btn-manual-ring");
+      if (testBtn) testBtn.onclick = () => showIncomingModal();
+
+      // ปุ่มในโมดัล: รับ/ปฏิเสธ -> หยุดเสียง (ไม่บังคับปิดโมดัล นอกจากปุ่มมี data-bs-dismiss)
+      document.getElementById("btn-accept")  ?.addEventListener("click", stopRingTone);
+      document.getElementById("btn-decline") ?.addEventListener("click", stopRingTone);
+
+      // รีโหลดจอตาหุ่น
+      document.getElementById("btn-reload-eye")?.addEventListener("click", reloadEye);
+    
+
+      // กันกรณีเคยค้าง overlay จากครั้งก่อน
+      document.querySelectorAll(".modal-backdrop").forEach(n => n.remove());
+      document.body.classList.remove("modal-open");
+      document.body.style.removeProperty("padding-right");
+
+      // ตั้งค่าเริ่มต้นของ room
+      const roomInput = document.getElementById("room-input");
+      if (roomInput) roomInput.value = "248932";
+    });
+  </script>
+
+  <h2>Hash Value Checker</h2>
+    <p id="result">Init</p>
+
+    <script>
+      
+        let hashValue = window.location.hash.substring(1); 
+        
+        if (hashValue) {
+            document.getElementById("result").innerText = "คุณส่งค่า hash มา: " + hashValue;
+        
+      // ตัวอย่างเอาไปใช้
+        if (hashValue === "2") {
+            joinRoom();
+            //window.location.href = "eye.html";
+            document.getElementById("publisher-box").style.display = "none";
+           // document.getElementById("subscribe-box").style.display = "block";
+        } else if (hashValue === "menu") {
+            console.log("แสดงเมนูหลัก");
+        }
+        } else {
+          createRoom();
+            //document.getElementById("publisher-box").style.display = "block"
+             //document.getElementById("subscribe-box").style.display = "none";
+            document.getElementById("result").innerText = "ไม่มีค่า hash";
+            
+        }
+
+  </script>
+  <script src="mqtt\sub.js"></script>
+</body>
+</html>
 
  
 
@@ -74,4 +363,5 @@
 </body>
 
 </html>
+
 
