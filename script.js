@@ -269,13 +269,13 @@ function stopScreenSharing() {
 }
 
 
-const host = "wss://test.mosquitto.org:8081/mqtt";
+const host = "ws://test.mosquitto.org:8081/mqtt";
 const clientId = "client" + Math.random().toString(36).substring(7);
 
 var direct='';
 var count=0;
-const topic = "Isaac";
-const topic1 = "Isaac1";
+const topic = "esp32/in";
+const topic1 = "esp32/out";
 
 window.addEventListener("load", (event) => {
   connectToBroker_pub();
